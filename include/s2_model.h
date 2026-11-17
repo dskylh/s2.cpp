@@ -89,14 +89,23 @@ struct StepResult {
     std::vector<float> logits;
 };
 
+bool parse_kv_cache_type(const std::string & name, ggml_type & out);
+const char * kv_cache_type_name(ggml_type type);
+
 class SlowARModel {
 public:
     SlowARModel();
     ~SlowARModel();
 
-    bool load(const std::string & gguf_path, int32_t gpu_device = -1, BackendType backend_type = BackendType::CPU, int32_t n_gpu_layers = -1);
+    bool load(const std::string & gguf_path, int32_t gpu_device = -1, BackendType backend_type = BackendType::CPU, int32_t n_gpu_layers = -1,
+              ggml_type kv_type_k = GGML_TYPE_F16, ggml_type kv_type_v = GGML_TYPE_F16);
 
-    bool load_shared(gguf_context * gguf_ctx, const std::string & gguf_path, int32_t gpu_device = -1, BackendType backend_type = BackendType::CPU, int32_t n_gpu_layers = -1);
+    bool load_shared(gguf_context * gguf_ctx, const std::string & gguf_path, int32_t gpu_device = -1, BackendType backend_type = BackendType::CPU, int32_t n_gpu_layers = -1,
+                     ggml_type kv_type_k = GGML_TYPE_F16, ggml_type kv_type_v = GGML_TYPE_F16);
+
+    void set_kv_cache_types(ggml_type type_k, ggml_type type_v);
+    ggml_type kv_type_k() const { return kv_type_k_; }
+    ggml_type kv_type_v() const { return kv_type_v_; }
 
     bool read_tensor_data(const std::string & gguf_path, gguf_context * gguf_ctx);
 
@@ -145,6 +154,8 @@ private:
     int32_t        max_seq_len_ = 0;
     int32_t        n_gpu_layers_ = -1;
     int32_t        n_past_     = 0;
+    ggml_type      kv_type_k_  = GGML_TYPE_F16;
+    ggml_type      kv_type_v_  = GGML_TYPE_F16;
     size_t         ctx_size_   = 0;
     std::vector<uint8_t> ctx_buf_;
     size_t         fast_ctx_size_ = 0;

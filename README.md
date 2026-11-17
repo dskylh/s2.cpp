@@ -357,6 +357,7 @@ For stability, embedding lookups remain on CPU in the current CUDA hybrid path, 
 | `-c`, `--cuda` | `-1` (CPU) | CUDA device index (`-1` = CPU only) |
 | `-M`, `--metal` | off | Use the default Metal device on macOS |
 | `-ngl`, `--gpu-layers` | `-1` (auto) | Number of transformer layers to offload to GPU (`-1` = all layers when a GPU backend is selected, otherwise `0`; `0` = CPU only) |
+| `-ct`, `--cache-type <type>` | `f16` | KV cache dtype for K and V (`f16`, `f32`, `q8_0`, `q4_0`, `q4_1`, `q5_0`, `q5_1`); quantized caches trade accuracy for memory and are dequantized to F32 on read. Requires `head_dim` divisible by the dtype block size (32). `-ctk` / `-ctv` override K and V independently |
 | `--threads N`, `-threads N` | `0` (auto) | Number of CPU threads (`0` = hardware concurrency when available, else `4`) |
 | `--max-tokens N`, `-max-tokens N` | `1024` | Max tokens to generate |
 | `--min-tokens-before-end N` | `0` | Minimum generated tokens before `EOS` is allowed; `0` matches fish-speech default behavior |

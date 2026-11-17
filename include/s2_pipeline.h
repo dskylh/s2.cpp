@@ -35,6 +35,8 @@ struct PipelineParams {
     int32_t gpu_device = -1;
     BackendType backend_type = BackendType::CPU;
     int32_t n_gpu_layers = -1;
+    ggml_type kv_type_k = GGML_TYPE_F16;
+    ggml_type kv_type_v = GGML_TYPE_F16;
     bool codec_auto_backend = true;
     bool codec_follow_backend = true;
     int32_t stream_decode_stride_frames = 0;

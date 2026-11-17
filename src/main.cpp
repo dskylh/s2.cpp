@@ -75,6 +75,9 @@ void print_uso() {
     safe_print("  -c, --cuda       <id>   CUDA device index (-1 = CPU)\n");
     safe_print("  -M, --metal             Use Metal backend (macOS only)\n");
     safe_print("  -ngl, --gpu-layers  <n>     Transformer layers on GPU (-1 = auto, 0 = CPU only)\n");
+    safe_print("  -ct,  --cache-type  <type>  KV cache type for K and V (f16, f32, q8_0, q4_0, q4_1, q5_0, q5_1; default: f16)\n");
+    safe_print("  -ctk, --cache-type-k <type> K cache type (default: f16)\n");
+    safe_print("  -ctv, --cache-type-v <type> V cache type (default: f16)\n");
     safe_print("  -threads, --threads <n>     CPU threads (0 = auto)\n");
     safe_print("  -max-tokens, --max-tokens <n>  Max tokens to generate\n");
     safe_print("  --min-tokens-before-end <n> Minimum tokens before EOS is allowed\n");
@@ -169,6 +172,33 @@ int main(int argc, char** argv) {
         else if (arg == "-c"  || arg == "--cuda")         { if (i+1 < argc) { try { params.gpu_device = std::stoi(argv[++i]); } catch(...) {} params.backend_type = s2::BackendType::CUDA; } }
         else if (arg == "-M"  || arg == "--metal")        { params.gpu_device = 0; params.backend_type = s2::BackendType::Metal; }
         else if (arg == "-ngl" || arg == "--gpu-layers")  { if (i+1 < argc) { try { params.n_gpu_layers = std::stoi(argv[++i]); } catch(...) {} } }
+        else if (arg == "-ct"  || arg == "--cache-type")  {
+            if (i+1 < argc) {
+                ggml_type kv_t = GGML_TYPE_F16;
+                if (!s2::parse_kv_cache_type(argv[++i], kv_t)) {
+                    safe_print_error("Error: unknown --cache-type value; expected f16, f32, q8_0, q4_0, q4_1, q5_0, or q5_1.\n");
+                    return 1;
+                }
+                params.kv_type_k = kv_t;
+                params.kv_type_v = kv_t;
+            }
+        }
+        else if (arg == "-ctk" || arg == "--cache-type-k") {
+            if (i+1 < argc) {
+                if (!s2::parse_kv_cache_type(argv[++i], params.kv_type_k)) {
+                    safe_print_error("Error: unknown --cache-type-k value; expected f16, f32, q8_0, q4_0, q4_1, q5_0, or q5_1.\n");
+                    return 1;
+                }
+            }
+        }
+        else if (arg == "-ctv" || arg == "--cache-type-v") {
+            if (i+1 < argc) {
+                if (!s2::parse_kv_cache_type(argv[++i], params.kv_type_v)) {
+                    safe_print_error("Error: unknown --cache-type-v value; expected f16, f32, q8_0, q4_0, q4_1, q5_0, or q5_1.\n");
+                    return 1;
+                }
+            }
+        }
         else if (arg == "-threads" || arg == "--threads") { if (i+1 < argc) { try { params.gen.n_threads      = std::stoi(argv[++i]); } catch(...) {} } }
         else if (arg == "-max-tokens" || arg == "--max-tokens") {
             if (i+1 < argc) {

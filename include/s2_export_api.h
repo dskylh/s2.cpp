@@ -52,6 +52,12 @@ extern "C"
                                                 const char* tokenizer_path, int32_t gpu_device,
                                                 int32_t backend_type, int32_t n_gpu_layers,
                                                 int codec_follow_backend);
+    S2_Export int InitializeS2PipelineFromFilesWithKvCacheTypes(s2::Pipeline* Pipeline, const char* gguf_path,
+                                                                const char* tokenizer_path, int32_t gpu_device,
+                                                                int32_t backend_type, int32_t n_gpu_layers,
+                                                                int codec_follow_backend,
+                                                                const char* kv_type_k,
+                                                                const char* kv_type_v);
 
     S2_Export s2::GenerateParams* AllocS2GenerateParams();
     S2_Export void ReleaseS2GenerateParams(s2::GenerateParams* GenerateParams);
@@ -71,6 +77,11 @@ extern "C"
     S2_Export int InitializeS2ModelWithGpuLayers(s2::SlowARModel* Model, const char* gguf_path,
                                                  int32_t gpu_device, int32_t backend_type,
                                                  int32_t n_gpu_layers);
+    S2_Export int InitializeS2ModelWithKvCacheTypes(s2::SlowARModel* Model, const char* gguf_path,
+                                                    int32_t gpu_device, int32_t backend_type,
+                                                    int32_t n_gpu_layers,
+                                                    const char* kv_type_k,
+                                                    const char* kv_type_v);
 
     S2_Export s2::Tokenizer* AllocS2Tokenizer();
     S2_Export void ReleaseS2Tokenizer(s2::Tokenizer* Tokenizer);

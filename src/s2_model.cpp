@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string>
 #include <algorithm>
+#include <cctype>
 #include <stdexcept>
 #include <unordered_set>
 #include <thread>
@@ -17,6 +18,33 @@
 #endif
 
 namespace s2 {
+
+bool parse_kv_cache_type(const std::string & name, ggml_type & out) {
+    std::string lower = name;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (lower == "f16")  { out = GGML_TYPE_F16;  return true; }
+    if (lower == "f32")  { out = GGML_TYPE_F32;  return true; }
+    if (lower == "q8_0") { out = GGML_TYPE_Q8_0; return true; }
+    if (lower == "q4_0") { out = GGML_TYPE_Q4_0; return true; }
+    if (lower == "q4_1") { out = GGML_TYPE_Q4_1; return true; }
+    if (lower == "q5_0") { out = GGML_TYPE_Q5_0; return true; }
+    if (lower == "q5_1") { out = GGML_TYPE_Q5_1; return true; }
+    return false;
+}
+
+const char * kv_cache_type_name(ggml_type type) {
+    switch (type) {
+        case GGML_TYPE_F16:  return "f16";
+        case GGML_TYPE_F32:  return "f32";
+        case GGML_TYPE_Q8_0: return "q8_0";
+        case GGML_TYPE_Q4_0: return "q4_0";
+        case GGML_TYPE_Q4_1: return "q4_1";
+        case GGML_TYPE_Q5_0: return "q5_0";
+        case GGML_TYPE_Q5_1: return "q5_1";
+        default:             return "unknown";
+    }
+}
 
 static int32_t resolve_n_threads(int32_t n_threads) {
     if (n_threads > 0) return n_threads;
@@ -201,7 +229,15 @@ SlowARModel::~SlowARModel() {
     weights_.ctx_w = nullptr;
 }
 
-bool SlowARModel::load_shared(gguf_context * ctx_gguf, const std::string & gguf_path, int32_t gpu_device, BackendType backend_type, int32_t n_gpu_layers) {
+void SlowARModel::set_kv_cache_types(ggml_type type_k, ggml_type type_v) {
+    kv_type_k_ = type_k;
+    kv_type_v_ = type_v;
+}
+
+bool SlowARModel::load_shared(gguf_context * ctx_gguf, const std::string & gguf_path, int32_t gpu_device, BackendType backend_type, int32_t n_gpu_layers,
+                              ggml_type kv_type_k, ggml_type kv_type_v) {
+    kv_type_k_ = kv_type_k;
+    kv_type_v_ = kv_type_v;
 
     backend_cpu_ = ggml_backend_cpu_init();
     if (!backend_cpu_) {
@@ -691,7 +727,8 @@ bool SlowARModel::read_tensor_data(const std::string & gguf_path, gguf_context *
     return true;
 }
 
-bool SlowARModel::load(const std::string & gguf_path, int32_t gpu_device, BackendType backend_type, int32_t n_gpu_layers) {
+bool SlowARModel::load(const std::string & gguf_path, int32_t gpu_device, BackendType backend_type, int32_t n_gpu_layers,
+                       ggml_type kv_type_k, ggml_type kv_type_v) {
 
     struct gguf_init_params params = { true, nullptr };
     gguf_context * ctx_gguf = gguf_init_from_file(gguf_path.c_str(), params);
@@ -700,7 +737,7 @@ bool SlowARModel::load(const std::string & gguf_path, int32_t gpu_device, Backen
         return false;
     }
 
-    if (!load_shared(ctx_gguf, gguf_path, gpu_device, backend_type, n_gpu_layers)) {
+    if (!load_shared(ctx_gguf, gguf_path, gpu_device, backend_type, n_gpu_layers, kv_type_k, kv_type_v)) {
         gguf_free(ctx_gguf);
         return false;
     }
@@ -743,8 +780,21 @@ bool SlowARModel::init_kv_cache(int32_t max_seq_len) {
         return false;
     }
 
-    memory_k_ = ggml_new_tensor_4d(ctx_kv_, GGML_TYPE_F16, head_dim, n_head_kv, max_seq_len, n_layer);
-    memory_v_ = ggml_new_tensor_4d(ctx_kv_, GGML_TYPE_F16, head_dim, n_head_kv, max_seq_len, n_layer);
+    const int64_t blck_k = ggml_blck_size(kv_type_k_);
+    const int64_t blck_v = ggml_blck_size(kv_type_v_);
+    if (blck_k <= 0 || (head_dim % blck_k) != 0) {
+        std::cerr << "[Model] head_dim (" << head_dim << ") is not divisible by K cache block size ("
+                  << blck_k << ") for type " << kv_cache_type_name(kv_type_k_) << "." << std::endl;
+        return false;
+    }
+    if (blck_v <= 0 || (head_dim % blck_v) != 0) {
+        std::cerr << "[Model] head_dim (" << head_dim << ") is not divisible by V cache block size ("
+                  << blck_v << ") for type " << kv_cache_type_name(kv_type_v_) << "." << std::endl;
+        return false;
+    }
+
+    memory_k_ = ggml_new_tensor_4d(ctx_kv_, kv_type_k_, head_dim, n_head_kv, max_seq_len, n_layer);
+    memory_v_ = ggml_new_tensor_4d(ctx_kv_, kv_type_v_, head_dim, n_head_kv, max_seq_len, n_layer);
 
     ggml_backend_t kv_backend = (n_gpu_layers_ > 0 && backend_gpu_) ? backend_gpu_ : backend_cpu_;
     kv_buf_ = ggml_backend_alloc_ctx_tensors(ctx_kv_, kv_backend);
@@ -758,6 +808,8 @@ bool SlowARModel::init_kv_cache(int32_t max_seq_len) {
 
     S2_LOG_INFO_STREAM("[Model] KV cache allocated on "
               << (n_gpu_layers_ > 0 && backend_gpu_ ? ggml_backend_name(backend_gpu_) : "CPU")
+              << " (K=" << kv_cache_type_name(kv_type_k_)
+              << ", V=" << kv_cache_type_name(kv_type_v_) << ")"
               << ", size: " << (ggml_backend_buffer_get_size(kv_buf_) / 1024.0 / 1024.0)
               << " MB" << std::endl);
 
@@ -1007,12 +1059,12 @@ bool SlowARModel::eval_cached(const std::vector<int32_t> & flat_tokens,
         ggml_tensor * k_mem = k;
         ggml_tensor * v_mem = v;
         if (n_past_ > 0) {
-            ggml_tensor * k_past = ggml_reshape_3d(ctx0,
-                ggml_view_1d(ctx0, memory_k_, static_cast<int64_t>(n_past_) * kv_size, layer_off_k),
-                head_dim, n_head_kv, n_past_);
-            ggml_tensor * v_past = ggml_reshape_3d(ctx0,
-                ggml_view_1d(ctx0, memory_v_, static_cast<int64_t>(n_past_) * kv_size, layer_off_v),
-                head_dim, n_head_kv, n_past_);
+            ggml_tensor * k_past = ggml_view_3d(ctx0, memory_k_,
+                head_dim, n_head_kv, n_past_,
+                memory_k_->nb[1], memory_k_->nb[2], layer_off_k);
+            ggml_tensor * v_past = ggml_view_3d(ctx0, memory_v_,
+                head_dim, n_head_kv, n_past_,
+                memory_v_->nb[1], memory_v_->nb[2], layer_off_v);
             if (k_past->type != k->type) k_past = ggml_cast(ctx0, k_past, k->type);
             if (v_past->type != v->type) v_past = ggml_cast(ctx0, v_past, v->type);
             k_mem = ggml_concat(ctx0, k_past, k, 2);
@@ -1077,7 +1129,6 @@ bool SlowARModel::eval_cached(const std::vector<int32_t> & flat_tokens,
     for (int32_t cb = 0; cb < hparams_.num_codebooks; ++cb) {
         ggml_backend_tensor_set(cb_id_tensors[cb], cb_vals[cb].data(), 0, n_tokens * sizeof(int32_t));
     }
-
     if (ggml_backend_sched_graph_compute(sched_, gf) != GGML_STATUS_SUCCESS) {
         std::fprintf(stderr, "[eval_cached] sched compute failed\n");
         ggml_backend_sched_reset(sched_);

@@ -412,7 +412,7 @@ bool Pipeline::init(const PipelineParams & params) {
     }
 
     const auto model_t0 = std::chrono::steady_clock::now();
-    if (!model().load_shared(shared_gguf, params.model_path, params.gpu_device, params.backend_type, params.n_gpu_layers)) {
+    if (!model().load_shared(shared_gguf, params.model_path, params.gpu_device, params.backend_type, params.n_gpu_layers, params.kv_type_k, params.kv_type_v)) {
         safe_print_error_ln("Pipeline error: could not load model from " + params.model_path);
         gguf_free(shared_gguf);
         return false;

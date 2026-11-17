@@ -396,6 +396,17 @@ int InitializeS2PipelineFromFiles(s2::Pipeline* Pipeline, const char* gguf_path,
                                   const char* tokenizer_path, int32_t gpu_device,
                                   int32_t backend_type, int32_t n_gpu_layers,
                                   int codec_follow_backend) {
+    return InitializeS2PipelineFromFilesWithKvCacheTypes(
+        Pipeline, gguf_path, tokenizer_path, gpu_device, backend_type,
+        n_gpu_layers, codec_follow_backend, nullptr, nullptr);
+}
+
+int InitializeS2PipelineFromFilesWithKvCacheTypes(s2::Pipeline* Pipeline, const char* gguf_path,
+                                                  const char* tokenizer_path, int32_t gpu_device,
+                                                  int32_t backend_type, int32_t n_gpu_layers,
+                                                  int codec_follow_backend,
+                                                  const char* kv_type_k,
+                                                  const char* kv_type_v) {
     if (!Pipeline || !has_value(gguf_path) || !has_value(tokenizer_path)) {
         return 0;
     }
@@ -407,6 +418,12 @@ int InitializeS2PipelineFromFiles(s2::Pipeline* Pipeline, const char* gguf_path,
     params.backend_type = to_backend_type(backend_type);
     params.n_gpu_layers = n_gpu_layers;
     params.codec_follow_backend = codec_follow_backend != 0;
+    if (has_value(kv_type_k) && !s2::parse_kv_cache_type(kv_type_k, params.kv_type_k)) {
+        return 0;
+    }
+    if (has_value(kv_type_v) && !s2::parse_kv_cache_type(kv_type_v, params.kv_type_v)) {
+        return 0;
+    }
     return Pipeline->init(params) ? 1 : 0;
 }
 
@@ -453,12 +470,30 @@ int InitializeS2Model(s2::SlowARModel* Model, const char* gguf_path,
 int InitializeS2ModelWithGpuLayers(s2::SlowARModel* Model, const char* gguf_path,
                                    int32_t gpu_device, int32_t backend_type,
                                    int32_t n_gpu_layers) {
+    return InitializeS2ModelWithKvCacheTypes(
+        Model, gguf_path, gpu_device, backend_type, n_gpu_layers, nullptr, nullptr);
+}
+
+int InitializeS2ModelWithKvCacheTypes(s2::SlowARModel* Model, const char* gguf_path,
+                                      int32_t gpu_device, int32_t backend_type,
+                                      int32_t n_gpu_layers,
+                                      const char* kv_type_k,
+                                      const char* kv_type_v) {
     if (!Model || !has_value(gguf_path)) {
         return 0;
     }
 
+    ggml_type type_k = GGML_TYPE_F16;
+    ggml_type type_v = GGML_TYPE_F16;
+    if (has_value(kv_type_k) && !s2::parse_kv_cache_type(kv_type_k, type_k)) {
+        return 0;
+    }
+    if (has_value(kv_type_v) && !s2::parse_kv_cache_type(kv_type_v, type_v)) {
+        return 0;
+    }
+
     return Model->load(std::string(gguf_path), gpu_device, to_backend_type(backend_type),
-                       n_gpu_layers) ? 1 : 0;
+                       n_gpu_layers, type_k, type_v) ? 1 : 0;
 }
 
 s2::Tokenizer* AllocS2Tokenizer() {
